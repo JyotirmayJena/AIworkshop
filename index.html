@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Coffee Shop — Live Orders Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="color-scheme" content="light dark" />
+  <style>
+    /* Minimal scrollbar for overflow panels */
+    .thin-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+    .thin-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,.2); border-radius: 9999px; }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 min-h-screen">
+  <!-- Header -->
+  <header class="sticky top-0 z-40 backdrop-blur bg-white/70 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">☕</span>
+        <h1 class="text-xl sm:text-2xl font-semibold tracking-tight">Live Orders Dashboard</h1>
+      </div>
+      <div class="ml-auto flex items-center gap-2 text-sm">
+        <span class="hidden sm:block px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">Manager View</span>
+        <button id="themeToggle" class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Toggle Theme</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Controls & Summary Bar -->
+  <section class="max-w-7xl mx-auto px-4 mt-4 space-y-3">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <!-- Summary -->
+      <div class="col-span-1 lg:col-span-2 grid grid-cols-3 gap-3">
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-950">
+          <div class="text-sm text-slate-500 dark:text-slate-400">Total Orders</div>
+          <div id="totalOrders" class="text-2xl font-bold">0</div>
+        </div>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-950">
+          <div class="text-sm text-slate-500 dark:text-slate-400">Ready / Pending</div>
+          <div class="text-2xl font-bold"><span id="readyCount">0</span> / <span id="pendingCount">0</span></div>
+        </div>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-950">
+          <div class="text-sm text-slate-500 dark:text-slate-400">Revenue (Today)</div>
+          <div id="revenue" class="text-2xl font-bold">₹0.00</div>
+        </div>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="col-span-1 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 bg-white dark:bg-slate-950 flex flex-col gap-3">
+        <div class="flex items-center gap-2">
+          <button id="addDemoOne" class="px-3 py-2 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90">Add Demo Order</button>
+          <button id="addDemoFive" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">+5</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <label for="intervalSelect" class="text-sm text-slate-500 dark:text-slate-400">Auto-Refresh:</label>
+          <select id="intervalSelect" class="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent">
+            <option value="off">Off</option>
+            <option value="5">Every 5s</option>
+            <option value="10">Every 10s</option>
+            <option value="30">Every 30s</option>
+            <option value="60">Every 60s</option>
+          </select>
+        </div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">Auto-refresh simulates order progress (Waiting → In Progress → Ready).</div>
+      </div>
+    </div>
+
+    <!-- Alerts & Assistant -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div class="col-span-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Alerts</h2>
+          <button id="clearAlerts" class="text-xs px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Clear</button>
+        </div>
+        <ul id="alertsList" class="mt-2 space-y-2 max-h-44 overflow-auto thin-scrollbar text-sm"></ul>
+      </div>
+      <div class="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Smart Assistant</h2>
+          <button id="refreshAssistant" title="Refresh suggestions" class="text-xs px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Update</button>
+        </div>
+        <div id="assistant" class="mt-2 text-sm grid gap-2"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Orders Grid -->
+  <main class="max-w-7xl mx-auto px-4 mt-4 mb-24">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-semibold">Orders</h2>
+      <div class="flex items-center gap-2 text-sm">
+        <input id="search" type="search" placeholder="Search by name or item…" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent w-56" />
+        <select id="statusFilter" class="px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-transparent">
+          <option value="all">All Statuses</option>
+          <option value="waiting">Waiting</option>
+          <option value="in_progress">In Progress</option>
+          <option value="ready">Ready</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="ordersGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
+  </main>
+
+  <!-- Footer / Credits -->
+  <footer class="fixed bottom-0 inset-x-0 bg-white/90 dark:bg-slate-950/90 border-t border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 py-2 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+      <div>Keyboard: <kbd class="px-1 py-0.5 border rounded">N</kbd> new demo · <kbd class="px-1 py-0.5 border rounded">/</kbd> search</div>
+      <div>Simulated data; no backend required.</div>
+    </div>
+  </footer>
+
+  <script>
+    // --- Data & Utilities ---------------------------------------------------
+    const fmt = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
+
+    const MENU = {
+      drinks: [
+        { name: 'Espresso', price: 120 },
+        { name: 'Americano', price: 150 },
+        { name: 'Cappuccino', price: 180 },
+        { name: 'Latte', price: 200 },
+        { name: 'Mocha', price: 220 },
+        { name: 'Cold Brew', price: 210 },
+        { name: 'Chai Latte', price: 170 },
+      ],
+      pastries: [
+        { name: 'Croissant', price: 140 },
+        { name: 'Chocolate Croissant', price: 160 },
+        { name: 'Blueberry Muffin', price: 130 },
+        { name: 'Cinnamon Roll', price: 160 },
+        { name: 'Banana Bread', price: 150 },
+      ],
+      snacks: [
+        { name: 'Veg Sandwich', price: 180 },
+        { name: 'Paneer Wrap', price: 220 },
+        { name: 'Bagel & Cream Cheese', price: 170 },
+        { name: 'Granola Yogurt', price: 160 },
+      ],
+    };
+
+    const NAMES = [
+      'Aarav','Vivaan','Aditya','Vihaan','Arjun','Sai','Reyansh','Muhammad','Krishna','Ishaan','Ananya','Diya','Aadhya','Pari','Anika','Sara','Meera','Aarohi','Prisha','Ira',
+      'Rohan','Kabir','Kunal','Dev','Neha','Priya','Ria','Zoya','Aisha','Naina'
+    ];
+
+    const PAY_METHODS = ['Cash', 'Card', 'UPI'];
+
+    const STATUS = {
+      WAITING: 'waiting',
+      IN_PROGRESS: 'in_progress',
+      READY: 'ready',
+      CANCELLED: 'cancelled',
+    };
+
+    const randomOf = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const id = () => Math.random().toString(36).slice(2, 9);
+
+    function randomItems() {
+      const all = [ ...MENU.drinks, ...MENU.pastries, ...MENU.snacks ];
+      const size = 1 + Math.floor(Math.random() * 5); // 1-5 items
+      const items = [];
+      for (let i=0;i<size;i++) {
+        const it = randomOf(all);
+        items.push({ name: it.name, price: it.price, qty: 1 + (Math.random() < 0.2 ? 1 : 0) }); // 20% chance qty 2
+      }
+      return items;
+    }
+
+    function orderTotal(order) {
+      return order.items.reduce((sum, it) => sum + it.price * it.qty, 0);
+    }
+
+    function timeSince(ts) {
+      const d = Date.now() - ts;
+      const m = Math.floor(d / 60000);
+      if (m < 1) return 'just now';
+      if (m < 60) return m + 'm ago';
+      const h = Math.floor(m / 60);
+      const rm = m % 60;
+      return h + 'h ' + (rm ? rm + 'm ' : '') + 'ago';
+    }
+
+    // --- State --------------------------------------------------------------
+    const state = {
+      orders: [],
+      timer: null,
+      intervalSec: null,
+      filters: { search: '', status: 'all' },
+      alerts: [],
+    };
+
+    // --- Seed with a few demo orders ---------------------------------------
+    function createDemoOrder() {
+      const createdAt = Date.now() - Math.floor(Math.random()*15)*60000; // up to 15m ago
+      const items = randomItems();
+      const o = {
+        id: id(),
+        customer: randomOf(NAMES),
+        items,
+        status: Math.random() < 0.6 ? STATUS.WAITING : (Math.random() < 0.5 ? STATUS.IN_PROGRESS : STATUS.READY),
+        payment: randomOf(PAY_METHODS),
+        createdAt,
+        updatedAt: createdAt,
+        cancelled: false,
+      };
+      return o;
+    }
+
+    function addDemo(n=1) {
+      for (let i=0;i<n;i++) state.orders.unshift(createDemoOrder());
+      render();
+    }
+
+    // --- Rendering ----------------------------------------------------------
+    const els = {
+      grid: document.getElementById('ordersGrid'),
+      total: document.getElementById('totalOrders'),
+      ready: document.getElementById('readyCount'),
+      pending: document.getElementById('pendingCount'),
+      revenue: document.getElementById('revenue'),
+      alerts: document.getElementById('alertsList'),
+      assistant: document.getElementById('assistant'),
+      search: document.getElementById('search'),
+      statusFilter: document.getElementById('statusFilter'),
+    };
+
+    function render() {
+      renderOrders();
+      renderSummary();
+      evaluateAlerts();
+      renderAlerts();
+      renderAssistant();
+    }
+
+    function renderOrders() {
+      const q = state.filters.search.toLowerCase();
+      const status = state.filters.status;
+      const orders = state.orders.filter(o => {
+        const matchQ = !q || o.customer.toLowerCase().includes(q) || o.items.some(it => it.name.toLowerCase().includes(q));
+        const matchS = status === 'all' ? true : (status === o.status);
+        return matchQ && matchS;
+      });
+
+      if (!orders.length) {
+        els.grid.innerHTML = `<div class="col-span-full text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">No orders match your filters.</div>`;
+        return;
+      }
+
+      els.grid.innerHTML = orders.map(orderCard).join('');
+
+      // Attach listeners
+      orders.forEach(o => {
+        const s = document.querySelector(`#status-${o.id}`);
+        const c = document.querySelector(`#cancel-${o.id}`);
+        const d = document.querySelector(`#delete-${o.id}`);
+        s?.addEventListener('change', (e)=> updateStatus(o.id, e.target.value));
+        c?.addEventListener('click', ()=> cancelOrder(o.id));
+        d?.addEventListener('click', ()=> deleteOrder(o.id));
+      });
+    }
+
+    function orderCard(o) {
+      const total = fmt.format(orderTotal(o));
+      const badge = {
+        [STATUS.WAITING]: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200',
+        [STATUS.IN_PROGRESS]: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200',
+        [STATUS.READY]: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200',
+        [STATUS.CANCELLED]: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200',
+      }[o.status];
+
+      const itemList = o.items.map(it => `
+        <li class="flex items-center justify-between"><span>${it.name}${it.qty>1?` × ${it.qty}`:''}</span><span class="text-slate-500">${fmt.format(it.price*it.qty)}</span></li>
+      `).join('');
+
+      const created = new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      return `
+      <article class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-4 flex flex-col gap-3 ${o.status===STATUS.WAITING? 'ring-1 ring-amber-300/50' : ''}">
+        <div class="flex items-start justify-between">
+          <div class="min-w-0">
+            <h3 class="font-semibold truncate">${o.customer}</h3>
+            <div class="text-xs text-slate-500">${o.payment} · ${created} · <span title="${new Date(o.createdAt).toLocaleString()}">${timeSince(o.createdAt)}</span></div>
+          </div>
+          <span class="text-[11px] px-2 py-1 rounded-full ${badge} capitalize">${label(o.status)}</span>
+        </div>
+        <ul class="text-sm grid gap-1">${itemList}</ul>
+        <div class="mt-auto flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-800">
+          <div class="text-sm font-medium">${total}</div>
+          <div class="flex items-center gap-2">
+            <select id="status-${o.id}" class="px-2 py-1 rounded-lg border text-sm border-slate-300 dark:border-slate-700 bg-transparent">
+              ${Object.values(STATUS).map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${label(s)}</option>`).join('')}
+            </select>
+            <button id="cancel-${o.id}" class="px-2 py-1 text-xs rounded-lg border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950">Cancel</button>
+            <button id="delete-${o.id}" class="px-2 py-1 text-xs rounded-lg border border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800" title="Remove order">✕</button>
+          </div>
+        </div>
+      </article>`;
+    }
+
+    function label(s) {
+      return ({ waiting: 'waiting', in_progress: 'in progress', ready: 'ready', cancelled: 'cancelled' })[s];
+    }
+
+    // --- Order Ops ----------------------------------------------------------
+    function updateStatus(id, newStatus) {
+      const o = state.orders.find(o => o.id === id);
+      if (!o) return;
+      o.status = newStatus;
+      if (newStatus === STATUS.CANCELLED) o.cancelled = true;
+      o.updatedAt = Date.now();
+      render();
+    }
+
+    function cancelOrder(id) {
+      updateStatus(id, STATUS.CANCELLED);
+      pushAlert('cancel', `Order #${id} was cancelled.`);
+    }
+
+    function deleteOrder(id) {
+      state.orders = state.orders.filter(o => o.id !== id);
+      render();
+    }
+
+    // --- Summary ------------------------------------------------------------
+    function renderSummary() {
+      els.total.textContent = state.orders.length;
+      const ready = state.orders.filter(o => o.status === STATUS.READY).length;
+      const pending = state.orders.filter(o => o.status === STATUS.WAITING || o.status === STATUS.IN_PROGRESS).length;
+      els.ready.textContent = ready;
+      els.pending.textContent = pending;
+      const revenue = state.orders
+        .filter(o => o.status === STATUS.READY && !o.cancelled)
+        .reduce((sum, o) => sum + orderTotal(o), 0);
+      els.revenue.textContent = fmt.format(revenue);
+    }
+
+    // --- Alerts -------------------------------------------------------------
+    function pushAlert(kind, text) {
+      const icon = kind === 'wait' ? '⏱️' : kind === 'group' ? '👥' : kind === 'cancel' ? '⚠️' : 'ℹ️';
+      state.alerts.unshift({ id: id(), ts: Date.now(), kind, text, icon });
+      renderAlerts();
+    }
+
+    function evaluateAlerts() {
+      const now = Date.now();
+      // Long-waiting orders (>10m)
+      state.orders.forEach(o => {
+        const waitedMin = (now - o.createdAt) / 60000;
+        if (o.status === STATUS.WAITING && waitedMin > 10 && !o.__flag_long_wait) {
+          o.__flag_long_wait = true;
+          pushAlert('wait', `Long wait: ${o.customer}'s order (${Math.round(waitedMin)}m).`);
+        }
+      });
+      // Large group orders (≥5 items)
+      state.orders.forEach(o => {
+        const itemsCount = o.items.reduce((n, it)=> n + it.qty, 0);
+        if (itemsCount >= 5 && !o.__flag_group) {
+          o.__flag_group = true;
+          pushAlert('group', `Large order (${itemsCount} items) for ${o.customer}.`);
+        }
+      });
+      // Cancelled orders
+      state.orders.forEach(o => {
+        if (o.cancelled && !o.__flag_cancel) {
+          o.__flag_cancel = true;
+          pushAlert('cancel', `Cancelled: ${o.customer}'s order.`);
+        }
+      });
+      // Keep alerts list short
+      state.alerts = state.alerts.slice(0, 50);
+    }
+
+    function renderAlerts() {
+      if (!state.alerts.length) {
+        els.alerts.innerHTML = `<li class="text-slate-500">No alerts right now.</li>`;
+        return;
+      }
+      els.alerts.innerHTML = state.alerts.map(a => `
+        <li class="flex items-start gap-2">
+          <span>${a.icon}</span>
+          <div>
+            <div>${a.text}</div>
+            <div class="text-[11px] text-slate-500">${timeSince(a.ts)}</div>
+          </div>
+        </li>
+      `).join('');
+    }
+
+    // --- Smart Assistant ----------------------------------------------------
+    function renderAssistant() {
+      const tips = [];
+      const inQueue = state.orders.filter(o => o.status === STATUS.WAITING || o.status === STATUS.IN_PROGRESS);
+      const ready = state.orders.filter(o => o.status === STATUS.READY);
+
+      // Trend analysis by item
+      const tally = {};
+      inQueue.forEach(o => o.items.forEach(it => {
+        tally[it.name] = (tally[it.name] || 0) + it.qty;
+      }));
+
+      const top = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,3);
+      if (top.length && top[0][1] >= 4) {
+        const list = top.map(([name, n])=>`${name} — ${n}`).join(', ');
+        tips.push(`Consider prepping more of: ${list}.`);
+      }
+
+      // Wait time suggestion
+      const longWait = inQueue.filter(o => (Date.now()-o.createdAt)/60000 > 10).length;
+      if (longWait) tips.push(`${longWait} order(s) waiting > 10m — prioritize these.`);
+
+      // Ready backlog
+      if (ready.length >= 4) tips.push(`There are ${ready.length} ready orders — call out pickup names to clear counter.`);
+
+      // Payments mix
+      const upiShare = shareOf(state.orders.filter(o=>!o.cancelled), o=>o.payment==='UPI');
+      if (upiShare >= 0.6) tips.push(`High UPI usage (${Math.round(upiShare*100)}%) — keep QR stand visible.`);
+
+      // Auto-refresh hint
+      if (!state.intervalSec && inQueue.length >= 5) tips.push(`Auto-refresh is off while ${inQueue.length} orders are pending — consider turning it on.`);
+
+      // Staff load
+      const largeGroups = state.orders.filter(o => o.items.reduce((n,it)=>n+it.qty,0) >= 5 && (o.status===STATUS.WAITING||o.status===STATUS.IN_PROGRESS)).length;
+      if (largeGroups >= 2) tips.push(`Multiple large group orders (${largeGroups}) — pre-assign roles (espresso, milk, pastry).`);
+
+      els.assistant.innerHTML = tips.length
+        ? tips.map(t => `<div class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">💡 ${t}</div>`).join('')
+        : `<div class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">All good! No urgent suggestions right now.</div>`;
+    }
+
+    function shareOf(list, pred) {
+      if (!list.length) return 0;
+      const yes = list.filter(pred).length;
+      return yes / list.length;
+    }
+
+    // --- Auto-Refresh (Progress Simulation) --------------------------------
+    function setIntervalFromSelect() {
+      const val = document.getElementById('intervalSelect').value;
+      if (state.timer) { clearInterval(state.timer); state.timer = null; }
+      state.intervalSec = val === 'off' ? null : parseInt(val,10);
+      if (state.intervalSec) {
+        state.timer = setInterval(progressTick, state.intervalSec * 1000);
+      }
+    }
+
+    function progressTick() {
+      // Simulate progress probabilistically
+      state.orders.forEach(o => {
+        if (o.status === STATUS.WAITING && Math.random() < 0.35) {
+          o.status = STATUS.IN_PROGRESS;
+          o.updatedAt = Date.now();
+        } else if (o.status === STATUS.IN_PROGRESS && Math.random() < 0.45) {
+          o.status = STATUS.READY;
+          o.updatedAt = Date.now();
+        }
+      });
+      render();
+    }
+
+    // --- Event Wiring -------------------------------------------------------
+    document.getElementById('addDemoOne').addEventListener('click', () => addDemo(1));
+    document.getElementById('addDemoFive').addEventListener('click', () => addDemo(5));
+    document.getElementById('intervalSelect').addEventListener('change', setIntervalFromSelect);
+    document.getElementById('clearAlerts').addEventListener('click', ()=> { state.alerts = []; renderAlerts(); });
+    document.getElementById('refreshAssistant').addEventListener('click', renderAssistant);
+
+    els.search.addEventListener('input', (e)=> { state.filters.search = e.target.value.trim(); renderOrders(); });
+    els.statusFilter.addEventListener('change', (e)=> { state.filters.status = e.target.value; renderOrders(); });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e)=>{
+      if (e.key === 'n' || e.key === 'N') { addDemo(1); }
+      if (e.key === '/') { e.preventDefault(); els.search.focus(); }
+    });
+
+    // Theme toggle
+    const themeBtn = document.getElementById('themeToggle');
+    function applyTheme(dark) { document.documentElement.classList.toggle('dark', dark); }
+    themeBtn.addEventListener('click', ()=> { const dark = !document.documentElement.classList.contains('dark'); applyTheme(dark); localStorage.setItem('themeDark', dark?'1':'0'); });
+    applyTheme(localStorage.getItem('themeDark')==='1');
+
+    // Init
+    addDemo(6);
+    setIntervalFromSelect();
+    render();
+  </script>
+</body>
+</html>
