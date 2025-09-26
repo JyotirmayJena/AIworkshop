@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jyotirmay's Coffee Shop – Orders Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Minimal scroll shadows for panels */
+    .scroll-shadow { mask-image: linear-gradient(to bottom, transparent, black 16px, black calc(100% - 16px), transparent); }
+  </style>
+</head>
+<body class="bg-neutral-50 text-neutral-900 min-h-screen">
+  <!-- Header -->
+  <header class="sticky top-0 z-30 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white border-b border-neutral-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-2xl bg-neutral-900 text-white grid place-items-center text-sm font-semibold">JC</div>
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold">Jyotirmay's Coffee Shop</h1>
+          <p class="text-xs text-neutral-500">Orders Dashboard • Single-file HTML/JS/Tailwind</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="addDemoBtn" class="px-3 py-2 rounded-xl bg-neutral-900 text-white text-sm font-medium hover:bg-neutral-800 active:scale-[.98] transition">Add Demo Order</button>
+        <button id="addBulkBtn" class="px-3 py-2 rounded-xl bg-neutral-200 text-neutral-900 text-sm font-medium hover:bg-neutral-300 active:scale-[.98] transition">+5 Demo</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Controls + Summary -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Summary cards -->
+    <div class="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4">
+        <div class="text-xs text-neutral-500">Total Orders</div>
+        <div id="sumTotal" class="mt-1 text-2xl font-semibold">0</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4">
+        <div class="text-xs text-neutral-500">Ready</div>
+        <div id="sumReady" class="mt-1 text-2xl font-semibold">0</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4">
+        <div class="text-xs text-neutral-500">Pending</div>
+        <div id="sumPending" class="mt-1 text-2xl font-semibold">0</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4">
+        <div class="text-xs text-neutral-500">Revenue Today</div>
+        <div id="sumRevenue" class="mt-1 text-2xl font-semibold">₹0</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 flex flex-col gap-3">
+      <div class="flex items-center justify-between gap-3">
+        <label for="refreshSelect" class="text-sm font-medium">Auto-progress cadence</label>
+        <select id="refreshSelect" class="w-40 px-3 py-2 bg-neutral-100 rounded-xl text-sm focus:outline-none">
+          <option value="0">Off</option>
+          <option value="5000">Every 5s</option>
+          <option value="10000" selected>Every 10s</option>
+          <option value="30000">Every 30s</option>
+          <option value="60000">Every 60s</option>
+        </select>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <label for="dateFilter" class="text-sm font-medium">Day (for revenue)</label>
+        <input id="dateFilter" type="date" class="px-3 py-2 bg-neutral-100 rounded-xl text-sm focus:outline-none" />
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <span class="text-sm font-medium">Smart Assistant</span>
+        <button id="assistantBtn" class="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 active:scale-[.98] transition">Generate tips</button>
+      </div>
+      <div id="assistantOut" class="text-sm text-neutral-700 bg-emerald-50 border border-emerald-100 rounded-xl p-3 hidden"></div>
+    </div>
+  </section>
+
+  <!-- Alerts & Orders -->
+  <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Alerts Panel -->
+    <aside class="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 flex flex-col">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-sm font-semibold">Alerts</h2>
+        <span id="alertsCount" class="text-xs text-neutral-500">0</span>
+      </div>
+      <div id="alertsList" class="space-y-3 overflow-auto max-h-[40vh] scroll-shadow"></div>
+      <p id="noAlerts" class="text-sm text-neutral-500 mt-2">No alerts right now. ☕</p>
+    </aside>
+
+    <!-- Orders Grid -->
+    <main class="lg:col-span-2">
+      <div id="ordersGrid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </main>
+  </section>
+
+  <!-- Footer hint -->
+  <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 text-center text-xs text-neutral-500">
+    Single-file demo • All data is ephemeral in-memory • Built with vanilla JS + Tailwind CDN
+  </footer>
+
+  <template id="orderCardTpl">
+    <article class="order-card bg-white rounded-2xl shadow-sm border border-neutral-200 p-4 flex flex-col gap-3">
+      <header class="flex items-start justify-between gap-2">
+        <div>
+          <h3 class="font-semibold text-sm customer">—</h3>
+          <div class="text-xs text-neutral-500 timeago">0m ago</div>
+        </div>
+        <span class="statusBadge text-[11px] px-2 py-1 rounded-full bg-neutral-100 text-neutral-700">waiting</span>
+      </header>
+      <ul class="items text-sm text-neutral-800 list-disc pl-5 space-y-1"></ul>
+      <div class="flex items-center justify-between text-sm">
+        <span class="payment px-2 py-1 rounded-lg bg-neutral-100">—</span>
+        <span class="amount font-semibold">₹0</span>
+      </div>
+      <div class="flex items-center gap-2 mt-1">
+        <button class="btn-start px-3 py-2 rounded-xl bg-amber-600 text-white text-xs font-medium hover:bg-amber-700">Start</button>
+        <button class="btn-ready px-3 py-2 rounded-xl bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700">Ready</button>
+        <button class="btn-cancel ml-auto px-3 py-2 rounded-xl bg-red-600 text-white text-xs font-medium hover:bg-red-700">Cancel</button>
+      </div>
+    </article>
+  </template>
+
+  <script>
+    // --- Data model ---
+    const STATUS = { WAIT: 'waiting', PROG: 'in progress', READY: 'ready', CANCELLED: 'cancelled' };
+
+    const MENU = {
+      drinks: [
+        { name: 'Espresso', price: 120 },
+        { name: 'Americano', price: 160 },
+        { name: 'Latte', price: 220 },
+        { name: 'Cappuccino', price: 220 },
+        { name: 'Mocha', price: 260 },
+        { name: 'Iced Latte', price: 230 },
+      ],
+      pastries: [
+        { name: 'Croissant', price: 140 },
+        { name: 'Pain au chocolat', price: 160 },
+        { name: 'Cinnamon roll', price: 150 },
+        { name: 'Blueberry muffin', price: 130 },
+      ],
+      snacks: [
+        { name: 'Bagel & cream cheese', price: 180 },
+        { name: 'Granola bar', price: 90 },
+        { name: 'Fruit cup', price: 110 },
+      ],
+    };
+
+    const PAYMENTS = ['Cash', 'Card', 'UPI'];
+    const NAMES = ['Aarav','Diya','Kabir','Isha','Ravi','Meera','Rohan','Ananya','Vikram','Sara','Arjun','Neha'];
+
+    let orders = [];
+    let idSeq = 1;
+    let autoTimer = null;
+
+    // --- Utilities ---
+    const fmtINR = n => `₹${n.toLocaleString('en-IN')}`;
+    const now = () => new Date();
+    const minutesSince = (t) => Math.floor((now() - t) / 60000);
+
+    function sumAmount(items) {
+      return items.reduce((acc, it) => acc + it.price * it.qty, 0);
+    }
+
+    function randomItem(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+    function randomOrder() {
+      // 1-3 drinks, 0-2 pastries, 0-1 snacks
+      const items = [];
+      const drinksCount = 1 + Math.floor(Math.random() * 3);
+      const pastriesCount = Math.floor(Math.random() * 3);
+      const snacksCount = Math.floor(Math.random() * 2);
+
+      for (let i=0;i<drinksCount;i++) items.push({ ...randomItem(MENU.drinks), qty: 1 + Math.floor(Math.random()*2) });
+      for (let i=0;i<pastriesCount;i++) items.push({ ...randomItem(MENU.pastries), qty: 1 });
+      for (let i=0;i<snacksCount;i++) items.push({ ...randomItem(MENU.snacks), qty: 1 });
+
+      return {
+        id: idSeq++,
+        customer: randomItem(NAMES),
+        items,
+        status: STATUS.WAIT,
+        payment: randomItem(PAYMENTS),
+        createdAt: new Date(Date.now() - Math.floor(Math.random()*8)*60000), // up to 8m ago
+        updatedAt: now(),
+        cancelled: false,
+      };
+    }
+
+    // --- Rendering ---
+    const grid = document.getElementById('ordersGrid');
+    const tpl = document.getElementById('orderCardTpl');
+
+    function statusClass(s) {
+      switch(s){
+        case STATUS.WAIT: return 'bg-amber-100 text-amber-800';
+        case STATUS.PROG: return 'bg-blue-100 text-blue-800';
+        case STATUS.READY: return 'bg-emerald-100 text-emerald-800';
+        case STATUS.CANCELLED: return 'bg-red-100 text-red-800 line-through';
+        default: return 'bg-neutral-100 text-neutral-700';
+      }
+    }
+
+    function render() {
+      grid.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      const activeOrders = orders.filter(o => !o.cancelled);
+
+      for (const order of orders) {
+        const node = tpl.content.firstElementChild.cloneNode(true);
+        node.dataset.id = order.id;
+        node.querySelector('.customer').textContent = `#${order.id} • ${order.customer}`;
+        node.querySelector('.timeago').textContent = `${minutesSince(order.createdAt)}m ago`;
+
+        const list = node.querySelector('.items');
+        list.innerHTML = '';
+        order.items.forEach(it => {
+          const li = document.createElement('li');
+          li.textContent = `${it.name} ×${it.qty}`;
+          list.appendChild(li);
+        });
+
+        const amt = sumAmount(order.items);
+        node.querySelector('.amount').textContent = fmtINR(amt);
+        node.querySelector('.payment').textContent = order.payment;
+
+        const badge = node.querySelector('.statusBadge');
+        badge.textContent = order.status;
+        badge.className = `statusBadge text-[11px] px-2 py-1 rounded-full ${statusClass(order.status)}`;
+
+        // Buttons
+        node.querySelector('.btn-start').onclick = () => updateStatus(order.id, STATUS.PROG);
+        node.querySelector('.btn-ready').onclick = () => updateStatus(order.id, STATUS.READY);
+        const cancelBtn = node.querySelector('.btn-cancel');
+        cancelBtn.onclick = () => cancelOrder(order.id);
+
+        if (order.status === STATUS.PROG) {
+          node.querySelector('.btn-start').disabled = true;
+          node.querySelector('.btn-start').classList.add('opacity-50');
+        }
+        if (order.status === STATUS.READY || order.cancelled) {
+          node.querySelector('.btn-start').disabled = true;
+          node.querySelector('.btn-ready').disabled = true;
+          node.querySelector('.btn-start').classList.add('opacity-50');
+          node.querySelector('.btn-ready').classList.add('opacity-50');
+        }
+        if (order.cancelled) {
+          cancelBtn.disabled = true;
+          cancelBtn.classList.add('opacity-50');
+        }
+
+        frag.appendChild(node);
+      }
+      grid.appendChild(frag);
+      renderSummary();
+      renderAlerts();
+    }
+
+    function renderSummary() {
+      const dayStr = document.getElementById('dateFilter').value || new Date().toISOString().slice(0,10);
+      const start = new Date(dayStr + 'T00:00:00');
+      const end = new Date(dayStr + 'T23:59:59');
+
+      const dayOrders = orders.filter(o => o.createdAt >= start && o.createdAt <= end);
+      const readyCount = dayOrders.filter(o => o.status === STATUS.READY && !o.cancelled).length;
+      const pendingCount = dayOrders.filter(o => o.status !== STATUS.READY && !o.cancelled).length;
+      const revenue = dayOrders.filter(o => o.status === STATUS.READY && !o.cancelled)
+        .reduce((acc, o) => acc + sumAmount(o.items), 0);
+
+      document.getElementById('sumTotal').textContent = dayOrders.length;
+      document.getElementById('sumReady').textContent = readyCount;
+      document.getElementById('sumPending').textContent = pendingCount;
+      document.getElementById('sumRevenue').textContent = fmtINR(revenue);
+    }
+
+    // --- Alerts ---
+    function renderAlerts() {
+      const list = document.getElementById('alertsList');
+      list.innerHTML = '';
+      const alerts = [];
+
+      for (const o of orders) {
+        // Long waiting > 10 minutes
+        if (!o.cancelled && o.status === STATUS.WAIT && minutesSince(o.createdAt) > 10) {
+          alerts.push({ type:'Delay', color:'bg-amber-100 text-amber-800', text: `Order #${o.id} waiting ${minutesSince(o.createdAt)}m. Consider starting.`});
+        }
+        // Large group: items qty >= 6
+        const totalQty = o.items.reduce((a,b)=>a+b.qty,0);
+        if (!o.cancelled && totalQty >= 6 && o.status !== STATUS.READY) {
+          alerts.push({ type:'Large Group', color:'bg-blue-100 text-blue-800', text: `Order #${o.id} has ${totalQty} items. Prep extra cups/pastries.`});
+        }
+        // Cancellations
+        if (o.cancelled) {
+          alerts.push({ type:'Cancelled', color:'bg-red-100 text-red-800', text: `Order #${o.id} by ${o.customer} was cancelled.`});
+        }
+      }
+
+      document.getElementById('alertsCount').textContent = alerts.length;
+      document.getElementById('noAlerts').classList.toggle('hidden', alerts.length > 0);
+
+      for (const a of alerts) {
+        const row = document.createElement('div');
+        row.className = 'border border-neutral-200 rounded-xl p-3 flex items-start gap-2';
+        row.innerHTML = `
+          <span class="text-[11px] px-2 py-1 rounded-full ${a.color}">${a.type}</span>
+          <p class="text-sm">${a.text}</p>
+        `;
+        list.appendChild(row);
+      }
+    }
+
+    // --- Actions ---
+    function updateStatus(id, status) {
+      const o = orders.find(x => x.id === id);
+      if (!o || o.cancelled) return;
+      o.status = status;
+      o.updatedAt = now();
+      render();
+    }
+
+    function cancelOrder(id) {
+      const o = orders.find(x => x.id === id);
+      if (!o || o.cancelled) return;
+      o.cancelled = true;
+      o.status = STATUS.CANCELLED;
+      o.updatedAt = now();
+      render();
+    }
+
+    function addDemo(n=1) {
+      for (let i=0;i<n;i++) orders.unshift(randomOrder());
+      render();
+    }
+
+    // --- Auto-progress simulation ---
+    function stepProgress() {
+      // Advance some orders based on age
+      const eligible = orders.filter(o => !o.cancelled && o.status !== STATUS.READY);
+      for (const o of eligible) {
+        const mins = minutesSince(o.createdAt);
+        const roll = Math.random();
+        if (o.status === STATUS.WAIT && (mins > 3 && roll < 0.4 || mins > 7 && roll < 0.8)) {
+          o.status = STATUS.PROG;
+          o.updatedAt = now();
+        } else if (o.status === STATUS.PROG && (mins > 6 && roll < 0.4 || mins > 10 && roll < 0.8)) {
+          o.status = STATUS.READY;
+          o.updatedAt = now();
+        }
+      }
+      render();
+    }
+
+    function setCadence(ms) {
+      if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+      if (ms && Number(ms) > 0) {
+        autoTimer = setInterval(stepProgress, Number(ms));
+      }
+    }
+
+    // --- Smart Assistant (heuristics only) ---
+    function generateTips() {
+      const tips = [];
+      const queue = orders.filter(o => !o.cancelled && o.status !== STATUS.READY);
+      const waiting = orders.filter(o => !o.cancelled && o.status === STATUS.WAIT);
+      const inprog = orders.filter(o => !o.cancelled && o.status === STATUS.PROG);
+
+      const drinkDemand = {};
+      for (const o of queue) for (const it of o.items) drinkDemand[it.name] = (drinkDemand[it.name]||0) + it.qty;
+
+      // Tip 1: Pre-batch for popular items
+      const top = Object.entries(drinkDemand).sort((a,b)=>b[1]-a[1])[0];
+      if (top && top[1] >= 4) tips.push(`Consider prepping more ${top[0]} — ${top[1]} in queue.`);
+
+      // Tip 2: Start aging orders
+      const overdue = waiting.filter(o => minutesSince(o.createdAt) > 8);
+      if (overdue.length) tips.push(`Start ${overdue.length} aging waiting orders (>8m) to reduce wait times.`);
+
+      // Tip 3: Balance stations
+      if (inprog.length >= 4) tips.push(`Many drinks in progress (${inprog.length}). Assign a runner for pickups.`);
+
+      // Tip 4: Restock pastries if queue has many pastries
+      const pastryCount = queue.reduce((acc,o)=>acc+o.items.filter(i=>MENU.pastries.some(p=>p.name===i.name)).reduce((a,b)=>a+b.qty,0),0);
+      if (pastryCount >= 6) tips.push(`Restock/display pastries — ${pastryCount} pastry items in active queue.`);
+
+      if (!tips.length) tips.push('All good! Keep brewing steady ☕.');
+
+      const box = document.getElementById('assistantOut');
+      box.innerHTML = '<ul class="list-disc pl-5 space-y-1">' + tips.map(t=>`<li>${t}</li>`).join('') + '</ul>';
+      box.classList.remove('hidden');
+    }
+
+    // --- Event wiring ---
+    document.getElementById('addDemoBtn').addEventListener('click', () => addDemo(1));
+    document.getElementById('addBulkBtn').addEventListener('click', () => addDemo(5));
+    document.getElementById('refreshSelect').addEventListener('change', (e)=> setCadence(e.target.value));
+    document.getElementById('assistantBtn').addEventListener('click', generateTips);
+    document.getElementById('dateFilter').addEventListener('change', renderSummary);
+
+    // --- Bootstrap ---
+    (function init(){
+      // Set default date filter to today
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      document.getElementById('dateFilter').value = `${yyyy}-${mm}-${dd}`;
+
+      addDemo(6);
+      setCadence(document.getElementById('refreshSelect').value);
+    })();
+  </script>
+</body>
+</html>
